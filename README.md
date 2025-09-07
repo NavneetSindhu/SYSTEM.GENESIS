@@ -1,4 +1,5 @@
 # SYSTEM.GENESIS – Character Concept Terminal  
+<img width="1919" height="972" alt="Screenshot 2025-09-07 231758" src="https://github.com/user-attachments/assets/3b183cdc-5955-4071-b1ff-7d6f7c1c63c3" />
 
 ## 🚀 Project Overview  
 **SYSTEM.GENESIS** is an immersive web-based creative suite for conceptualizing and refining **visual characters** using the power of **generative AI**.  
@@ -18,9 +19,13 @@ Define your character concept with:
 - **Reference-based generation**: Upload an image to guide AI output.  
 
 ### 🖥️ Live Generation Terminal  
-- Replaces standard loading screens with a **retro boot-up simulation**.  
-- Displays **live-typing system logs** during image/text generation.  
+- Replaces standard loading screens with a **retro boot-up simulation**.
+- <img width="1919" height="963" alt="Screenshot 2025-09-07 232807" src="https://github.com/user-attachments/assets/fb1261a5-1819-4358-8449-3c1f3f219286" />
+
+- Displays **live-typing system logs** during image/text generation.
+- <img width="1919" height="965" alt="Screenshot 2025-09-07 232313" src="https://github.com/user-attachments/assets/679dbab4-045b-43cd-8525-68c1a05b8a8b" />
 - Builds immersion with a **hacker/console aesthetic**.  
+
 
 ### 📂 Character Dossier File  
 Automatically generated structured profile using **Gemini text models**.  
@@ -30,6 +35,7 @@ Includes:
 - **ABILITIES**  
 - **WEAKNESSES**  
 - **SIGNATURE QUOTE**  
+<img width="1913" height="962" alt="Screenshot 2025-09-07 232412" src="https://github.com/user-attachments/assets/2c771580-ff19-42e6-b865-be8670b2bed7" />
 
 Styled with **subtle text-flicker animations** to enhance narrative depth.  
 
@@ -42,6 +48,8 @@ Styled with **subtle text-flicker animations** to enhance narrative depth.
   - Side-by-side **image preview + chat log** timeline.  
 - **Before & After Comparator**:  
   - Interactive **slider view** to compare original vs. refined generations.  
+<img width="1919" height="962" alt="Screenshot 2025-09-07 232634" src="https://github.com/user-attachments/assets/86fbfbfa-2e99-4c85-9872-5f301154f5b4" />
+<img width="1919" height="966" alt="image" src="https://github.com/user-attachments/assets/ab93a830-e061-4018-847b-7a321415cec8" />
 
 ---
 
