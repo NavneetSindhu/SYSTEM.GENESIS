@@ -1,0 +1,5 @@
+{
+  "name": "Comic Character Generator Final",
+  "description": "An application that generates a comic book from a story idea using AI. It creates a story, generates images for each scene, and compiles them into a downloadable PDF with optional voice narration.",
+  "requestFramePermissions": []
+}
