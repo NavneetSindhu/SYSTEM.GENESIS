@@ -12,10 +12,26 @@ interface GenerationBlockProps {
   onUpdateTitle?: (historyItemId: string, newTitle: string) => void;
   onGenerateVariations?: (historyItemId: string) => void;
   onStartRefinement?: (image: GeneratedImage) => void;
+  onGenerateOriginStory?: (historyItemId: string) => void;
+  onSetCharacterVoice?: (historyItemId: string, voiceArchetype: string, voiceId: string) => void;
+  onGenerateFoil?: (historyItemId: string) => void;
   isGeneratingVariations?: boolean;
+  isGeneratingFoil?: boolean;
 }
 
-export const GenerationBlock: React.FC<GenerationBlockProps> = ({ generationSet, isLatest, onImageClick, onUpdateTitle, onGenerateVariations, onStartRefinement, isGeneratingVariations }) => {
+export const GenerationBlock: React.FC<GenerationBlockProps> = ({ 
+    generationSet, 
+    isLatest, 
+    onImageClick, 
+    onUpdateTitle, 
+    onGenerateVariations, 
+    onStartRefinement, 
+    onGenerateOriginStory,
+    onSetCharacterVoice,
+    onGenerateFoil,
+    isGeneratingVariations,
+    isGeneratingFoil
+}) => {
   const blockRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const prevStatusRef = useRef(generationSet.status);
@@ -79,7 +95,7 @@ export const GenerationBlock: React.FC<GenerationBlockProps> = ({ generationSet,
 
     prevStatusRef.current = status;
 
-  }, [isLatest, status]);
+  }, [isLatest, status, generationSet.images.length]);
   
   const handleSave = () => {
     if (onUpdateTitle && titleValue.trim() && titleValue.trim() !== (prompt.title || prompt.scene)) {
@@ -110,7 +126,7 @@ export const GenerationBlock: React.FC<GenerationBlockProps> = ({ generationSet,
               <div className="flex-1 min-w-[200px]">
                 <div className="flex items-center gap-3">
                   {isEditing ? (
-                     <div className="flex items-center text-4xl w-full" style={{ fontFamily: "'VT323', monospace" }}>
+                     <div className="flex items-center text-3xl sm:text-4xl w-full" style={{ fontFamily: "'VT323', monospace" }}>
                         <span>[</span>
                         <input
                             ref={inputRef}
@@ -124,7 +140,7 @@ export const GenerationBlock: React.FC<GenerationBlockProps> = ({ generationSet,
                         <span>]</span>
                     </div>
                   ) : (
-                    <h2 className="text-4xl" style={{ fontFamily: "'VT323', monospace" }}>
+                    <h2 className="text-3xl sm:text-4xl" style={{ fontFamily: "'VT323', monospace" }}>
                       [ {status === 'generating' ? 'GENERATING_TRANSMISSION' : (prompt.title || prompt.scene)} ]
                     </h2>
                   )}
@@ -154,17 +170,31 @@ export const GenerationBlock: React.FC<GenerationBlockProps> = ({ generationSet,
                     {status === 'generating' ? 'Awaiting response...' : new Date(timestamp).toLocaleString()}
                 </p>
                  {!isDemo && onGenerateVariations && status !== 'generating' && (
-                    <button
-                        onClick={() => onGenerateVariations(id)}
-                        disabled={isGeneratingVariations}
-                        className="text-lg py-2 px-4 border transition-colors whitespace-nowrap disabled:opacity-50"
-                        aria-label="Generate more variations"
-                        style={{ fontFamily: "'VT323', monospace", borderColor: 'var(--theme-color)', color: 'var(--theme-color)' }}
-                        onMouseOver={e => { if(!e.currentTarget.disabled) { e.currentTarget.style.backgroundColor = 'var(--theme-color)'; e.currentTarget.style.color = 'black'; } }}
-                        onMouseOut={e => { if(!e.currentTarget.disabled) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--theme-color)'; } }}
-                    >
-                        {isGeneratingVariations ? '[ GENERATING... ]' : '[ GENERATE_VARIATIONS ]'}
-                    </button>
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                      <button
+                          onClick={() => onGenerateFoil?.(id)}
+                          disabled={isGeneratingFoil || !dossier || dossier === 'generating'}
+                          className="text-lg py-2 px-4 border transition-colors whitespace-nowrap disabled:opacity-50"
+                          aria-label="Generate a foil character (companion/nemesis)"
+                          title={!dossier || dossier === 'generating' ? "A dossier must be generated first" : "Generate Foil"}
+                          style={{ fontFamily: "'VT323', monospace", borderColor: 'var(--theme-border-color)', color: 'var(--theme-color)' }}
+                          onMouseOver={e => { if(!e.currentTarget.disabled) { e.currentTarget.style.backgroundColor = 'var(--theme-color)'; e.currentTarget.style.color = 'black'; } }}
+                          onMouseOut={e => { if(!e.currentTarget.disabled) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--theme-color)'; } }}
+                      >
+                          {isGeneratingFoil ? '[ GENERATING... ]' : '[ GENERATE_FOIL ]'}
+                      </button>
+                      <button
+                          onClick={() => onGenerateVariations(id)}
+                          disabled={isGeneratingVariations}
+                          className="text-lg py-2 px-4 border transition-colors whitespace-nowrap disabled:opacity-50"
+                          aria-label="Generate more variations"
+                          style={{ fontFamily: "'VT323', monospace", borderColor: 'var(--theme-border-color)', color: 'var(--theme-color)' }}
+                          onMouseOver={e => { if(!e.currentTarget.disabled) { e.currentTarget.style.backgroundColor = 'var(--theme-color)'; e.currentTarget.style.color = 'black'; } }}
+                          onMouseOut={e => { if(!e.currentTarget.disabled) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--theme-color)'; } }}
+                      >
+                          {isGeneratingVariations ? '[ GENERATING... ]' : '[ GENERATE_VARIATIONS ]'}
+                      </button>
+                    </div>
                 )}
               </div>
             </div>
@@ -186,7 +216,13 @@ export const GenerationBlock: React.FC<GenerationBlockProps> = ({ generationSet,
                 </div>
                 {dossier && status === 'complete' && (
                   <div className="mt-6">
-                      <DossierFile dossier={dossier} />
+                      <DossierFile 
+                        dossier={dossier} 
+                        historyItemId={id}
+                        characterDesc={prompt.characterDesc}
+                        onGenerateOriginStory={onGenerateOriginStory}
+                        onSetCharacterVoice={onSetCharacterVoice}
+                      />
                   </div>
                 )}
               </div>

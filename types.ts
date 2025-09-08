@@ -21,6 +21,9 @@ export interface Dossier {
   abilities: string[];
   weaknesses: string[];
   quote: string;
+  originStory?: string | 'generating';
+  voiceArchetype?: string;
+  voiceId?: string;
 }
 
 export interface HistoryItem {

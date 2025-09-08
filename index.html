@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="https://github-production-user-asset-6210df.s3.amazonaws.com/128820939/486530995-5bf84842-0d59-4a38-aa80-8a6eb3cdcb8e.png?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAVCODYLSA53PQK4ZA%2F20250907%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20250907T171104Z&X-Amz-Expires=300&X-Amz-Signature=763239afed963a8b077623f754a099de3c84b8c833dd1f57b04a5a2529c1d20d&X-Amz-SignedHeaders=host" />
+    <link rel="icon" type="image/png" href="https://storage.googleapis.com/a-prod-public/user-assets/9158529/2179612.jpg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Character Generator</title>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -228,6 +228,19 @@
       }
       .text-flicker-subtle {
         animation: text-flicker-subtle 3s linear infinite;
+      }
+      @keyframes sound-wave {
+        from { transform: scaleY(0.5); }
+        to { transform: scaleY(1); }
+      }
+      /* Hide custom cursor on touch devices */
+      @media (pointer: coarse) {
+        .trail-dot {
+          display: none !important;
+        }
+        body {
+          cursor: auto;
+        }
       }
     </style>
   <script type="importmap">

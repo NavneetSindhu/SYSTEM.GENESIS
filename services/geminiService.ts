@@ -1,15 +1,65 @@
 import { GoogleGenAI, Modality, Type } from "@google/genai";
-import type { ArtStyle, UploadedImage, GeneratedImage, Dossier } from '../types';
+import type { ArtStyle, UploadedImage, GeneratedImage, Dossier, HistoryItem } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+let ai: GoogleGenAI | null = null;
 
-export const getSceneSuggestions = async (characterDesc: string, artStyle: ArtStyle): Promise<string[]> => {
-  const prompt = `Based on this character description: "${characterDesc}" and the art style "${artStyle}", generate 3 short, creative, and distinct suggestions for a scene, outfit, or action. The suggestions should be concise and inspiring.`;
+const getApiKey = (): string | null => {
+  try {
+    const userKey = localStorage.getItem('user-gemini-api-key');
+    if (userKey && userKey.trim()) {
+      return userKey;
+    }
+  } catch (e) {
+    console.error("Could not read API key from localStorage", e);
+  }
+  return process.env.API_KEY || null;
+};
+
+const initializeClient = () => {
+  const apiKey = getApiKey();
+  if (apiKey) {
+    ai = new GoogleGenAI({ apiKey });
+  } else {
+    ai = null;
+  }
+};
+
+initializeClient(); // Initial call
+
+export const updateUserApiKey = (apiKey: string | null) => {
+  try {
+    if (apiKey) {
+      localStorage.setItem('user-gemini-api-key', apiKey);
+    } else {
+      localStorage.removeItem('user-gemini-api-key');
+    }
+  } catch (e) {
+    console.error("Could not write API key to localStorage", e);
+  }
+  initializeClient(); // Re-initialize client with new key settings
+};
+
+const getAiClient = (): GoogleGenAI => {
+  if (!ai) {
+    throw new Error("Gemini API key is not configured. Please set a valid API key to continue.");
+  }
+  return ai;
+};
+
+export const getSceneSuggestions = async (characterDesc: string, artStyle: ArtStyle, currentScene?: string): Promise<string[]> => {
+  const prompt = currentScene && currentScene.trim()
+    ? `A user is creating a character.
+      - Character Description: "${characterDesc}"
+      - Art Style: "${artStyle}"
+      - Their current idea for a scene/outfit/action is: "${currentScene}"
+      Based on all this information, generate 3 short, creative, and distinct suggestions that build upon or offer cool alternatives to their current idea. The suggestions should be concise and inspiring.`
+    : `Based on this character description: "${characterDesc}" and the art style "${artStyle}", generate 3 short, creative, and distinct suggestions for a scene, outfit, or action. The suggestions should be concise and inspiring.`;
   
   try {
-    const response = await ai.models.generateContent({
+    const client = getAiClient();
+    const response = await client.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: prompt,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -48,9 +98,10 @@ export const generateSceneVariations = async (characterDesc: string, initialScen
   const prompt = `Based on the character "${characterDesc}" and their initial situation "${initialScene}", create two additional, distinct scene descriptions. These new scenes should feature the same character but in different poses, actions, or moments related to the initial scene. Each description should be a concise, single sentence.`;
 
   try {
-    const response = await ai.models.generateContent({
+    const client = getAiClient();
+    const response = await client.models.generateContent({
       model: 'gemini-2.5-flash',
-      contents: prompt,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -112,8 +163,9 @@ export const generateCharacterImage = async (
   parts.push({ text: prompt });
 
   try {
+    const client = getAiClient();
     const generateVariation = async () => {
-      const response = await ai.models.generateContent({
+      const response = await client.models.generateContent({
           model: 'gemini-2.5-flash-image-preview',
           contents: { parts },
           config: {
@@ -133,9 +185,12 @@ export const generateCharacterImage = async (
       }
       return imagePart.inlineData.data;
     };
-
-    const results = await Promise.all([generateVariation(), generateVariation()]);
-    return results;
+    
+    // Serialized with a small delay to prevent XHR errors
+    const result1 = await generateVariation();
+    await new Promise(resolve => setTimeout(resolve, 250));
+    const result2 = await generateVariation();
+    return [result1, result2];
 
   } catch(e) {
     const errorMessage = e instanceof Error ? e.message : String(e);
@@ -158,12 +213,13 @@ export const refineCharacterImage = async (
   const prompt = `Using the provided image as a direct visual base, apply the following modification: "${refinePrompt}". Maintain the original character and art style as much as possible. The output must be a clean image with no text, watermarks, or borders.`;
   
   try {
+      const client = getAiClient();
       const parts = [
           { inlineData: { mimeType: 'image/png', data: originalImageB64 } },
           { text: prompt }
       ];
 
-      const response = await ai.models.generateContent({
+      const response = await client.models.generateContent({
           model: 'gemini-2.5-flash-image-preview',
           contents: { parts },
           config: {
@@ -209,12 +265,13 @@ export const conversationalEditImage = async (
   const prompt = `Using the provided image as a direct visual base, apply the following modification: "${refinePrompt}". Maintain the original subject and art style as much as possible, unless instructed otherwise. The output must be a clean image with no text, watermarks, or borders.`;
   
   try {
+      const client = getAiClient();
       const parts = [
           { inlineData: { mimeType: mimeType, data: originalImageB64 } },
           { text: prompt }
       ];
 
-      const response = await ai.models.generateContent({
+      const response = await client.models.generateContent({
           model: 'gemini-2.5-flash-image-preview',
           contents: { parts },
           config: {
@@ -252,9 +309,10 @@ export const generateCharacterDossier = async (characterDesc: string, artStyle: 
     const prompt = `Based on this character description: "${characterDesc}" within a "${artStyle}" world, generate a classified dossier file. The dossier should contain a callsign, a short background, a list of 3-4 key abilities, a list of 1-2 weaknesses, and a memorable quote.`;
 
     try {
-        const response = await ai.models.generateContent({
+        const client = getAiClient();
+        const response = await client.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: prompt,
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
             config: {
                 responseMimeType: "application/json",
                 responseSchema: {
@@ -290,5 +348,135 @@ export const generateCharacterDossier = async (characterDesc: string, artStyle: 
         const errorMessage = e instanceof Error ? e.message : String(e);
         console.error("Error generating character dossier:", errorMessage);
         throw new Error(`Failed to generate character dossier. ${errorMessage}`);
+    }
+};
+
+export const generateOriginStory = async (characterDesc: string, dossier: Dossier): Promise<string> => {
+    const prompt = `Write a compelling, single-paragraph origin story for the following character.
+- Character Description: ${characterDesc}
+- Callsign: ${dossier.callsign}
+- Background Summary: ${dossier.background}
+- Key Abilities: ${dossier.abilities.join(', ')}
+- Weaknesses: ${dossier.weaknesses.join(', ')}
+- Quote: "${dossier.quote}"
+The origin story should be concise, evocative, and expand upon these details.`;
+
+    try {
+        const client = getAiClient();
+        const response = await client.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+        });
+        return response.text.trim();
+    } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        console.error("Error generating origin story:", errorMessage);
+        throw new Error(`Failed to generate origin story. ${errorMessage}`);
+    }
+};
+
+export const generateFoilCharacter = async (originalCharacter: HistoryItem): Promise<{ characterDesc: string, scene: string, dossier: Dossier }> => {
+    const { prompt, dossier } = originalCharacter;
+    const promptContext = `
+Original Character Details:
+- Description: ${prompt.characterDesc}
+- Scene: ${prompt.scene}
+- Art Style: ${prompt.artStyle}
+- Dossier: ${JSON.stringify(dossier, null, 2)}
+`;
+    
+    const fullPrompt = `Based on the provided original character, create a "foil" character for them. A foil can be a companion, a rival, or a nemesis. The foil character must be distinct but thematically connected to the original.
+${promptContext}
+Generate a new character description, a scene they would be in, and a full dossier for this foil character.`;
+
+    try {
+         const client = getAiClient();
+         const response = await client.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        characterDesc: { type: Type.STRING, description: "A detailed description of the new foil character." },
+                        scene: { type: Type.STRING, description: "A description of a scene, outfit or action for the foil character." },
+                        dossier: {
+                            type: Type.OBJECT,
+                            properties: {
+                                callsign: { type: Type.STRING, description: "A cool code name or callsign." },
+                                background: { type: Type.STRING, description: "A brief background story." },
+                                abilities: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of key skills." },
+                                weaknesses: { type: Type.ARRAY, items: { type: Type.STRING }, description: "A list of weaknesses." },
+                                quote: { type: Type.STRING, description: "A memorable quote." }
+                            },
+                             required: ["callsign", "background", "abilities", "weaknesses", "quote"]
+                        }
+                    },
+                    required: ["characterDesc", "scene", "dossier"]
+                }
+            }
+        });
+
+        const jsonText = response.text.trim();
+        const result = JSON.parse(jsonText);
+        
+        if (result && result.characterDesc && result.scene && result.dossier) {
+            return result;
+        }
+        throw new Error("AI response did not match the required foil character format.");
+
+    } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        console.error("Error generating foil character:", errorMessage);
+        throw new Error(`Failed to generate foil character. ${errorMessage}`);
+    }
+};
+
+export const generateVoiceSelection = async (dossier: Dossier, characterDesc: string, availableVoices: string[]): Promise<string> => {
+    const prompt = `
+Analyze the following character's core description and dossier to determine their most likely voice profile based on gender and age cues.
+Choose ONLY ONE of the following profiles that best fits the character.
+
+Available Voice Profiles:
+${availableVoices.join('\n')}
+
+Character's Core Description:
+"${characterDesc}"
+
+Character Dossier:
+- Callsign: ${dossier.callsign}
+- Background: ${dossier.background}
+- Quote: "${dossier.quote}"
+
+Analysis Cues:
+- For gender, look for terms like "male", "female", "he", "she", "non-binary", "android".
+- For age, look for terms like "young", "old", "grizzled", "elegant", "boy", "girl", "veteran".
+- If the gender is ambiguous or non-binary, choose a suitable neutral-sounding voice like 'Young Adult Female' or 'Young Adult Male'.
+- If the character is a non-human entity (like an android), infer a likely voice presentation from the description (e.g., "sleek female android" implies a female voice).
+
+Based on your analysis, respond with ONLY the name of the chosen profile (e.g., "Old Male").
+
+Chosen Profile:`;
+
+    try {
+        const client = getAiClient();
+        const response = await client.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+        });
+        // Sanitize the response to improve matching reliability
+        const chosenVoice = response.text.replace(/[.,]/g, '').trim();
+        
+        if (availableVoices.includes(chosenVoice)) {
+            return chosenVoice;
+        }
+        
+        console.warn(`AI returned an unexpected voice archetype: "${chosenVoice}". Falling back to default.`);
+        return availableVoices[0]; 
+    } catch (e) {
+        const errorMessage = e instanceof Error ? e.message : String(e);
+        console.error("Error generating voice selection:", errorMessage);
+        throw new Error(`Failed to select a voice. ${errorMessage}`);
     }
 };

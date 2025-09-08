@@ -9,8 +9,9 @@ import { GenerationBlock } from './components/GenerationBlock';
 import { ImagePreviewModal } from './components/ImagePreviewModal';
 import { ChatEditor } from './components/ChatEditor';
 import { RefinementChatModal } from './components/RefinementChatModal';
-import { generateCharacterImage, generateCharacterDossier } from './services/geminiService';
-import type { ArtStyle, GeneratedImage, UploadedImage, HistoryItem, ChatMessage } from './types';
+import { generateCharacterImage, generateCharacterDossier, generateOriginStory, generateFoilCharacter, updateUserApiKey } from './services/geminiService';
+import { updateUserElevenLabsApiKey } from './services/elevenLabsService';
+import type { ArtStyle, GeneratedImage, UploadedImage, HistoryItem, ChatMessage, Dossier } from './types';
 
 const DEMO_HISTORY_ITEM: HistoryItem = {
   id: 'demo-0',
@@ -46,6 +47,7 @@ const App: React.FC = () => {
   const [view, setView] = useState<'generator' | 'editor'>('generator');
   const [showSplash, setShowSplash] = useState<boolean>(true);
   const [variationsLoadingId, setVariationsLoadingId] = useState<string | null>(null);
+  const [foilLoadingId, setFoilLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [generationHistory, setGenerationHistory] = useState<HistoryItem[]>([]);
@@ -56,16 +58,53 @@ const App: React.FC = () => {
   const [chatBaseImage, setChatBaseImage] = useState<UploadedImage | null>(null);
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
 
+  // State for user-provided API Keys
+  const [userApiKey, setUserApiKey] = useState<string | null>(null);
+  const [elevenLabsApiKey, setElevenLabsApiKey] = useState<string | null>(null);
+
 
   const mainContainerRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLDivElement>(null);
+  
+  // Load user API keys from local storage
+  useEffect(() => {
+    try {
+      const storedGeminiKey = localStorage.getItem('user-gemini-api-key');
+      if (storedGeminiKey) {
+        setUserApiKey(storedGeminiKey);
+      }
+       const storedElevenLabsKey = localStorage.getItem('user-elevenlabs-api-key');
+       if (storedElevenLabsKey) {
+           setElevenLabsApiKey(storedElevenLabsKey);
+       }
+    } catch (e) {
+      console.error("Could not read API key(s) from localStorage:", e);
+    }
+  }, []);
 
   // Load generator history from session storage
   useEffect(() => {
     try {
       const savedHistory = sessionStorage.getItem('character-gen-history');
       if (savedHistory) {
-        setGenerationHistory(JSON.parse(savedHistory));
+        const loadedHistory: HistoryItem[] = JSON.parse(savedHistory);
+        
+        // Sanitize history to remove any 'generating' states from a page refresh
+        const sanitizedHistory = loadedHistory
+          .filter(item => item.status !== 'generating') // Remove items that were mid-generation
+          .map(item => {
+            const newItem = { ...item };
+            if (newItem.dossier === 'generating') {
+              newItem.dossier = undefined;
+            }
+            if (typeof newItem.dossier === 'object' && newItem.dossier.originStory === 'generating') {
+               const { originStory, ...restDossier } = newItem.dossier;
+               newItem.dossier = restDossier as Dossier;
+            }
+            return newItem;
+          });
+
+        setGenerationHistory(sanitizedHistory);
       }
     } catch (e) {
       console.error("Failed to load history from session storage:", e);
@@ -135,6 +174,27 @@ const App: React.FC = () => {
     }, mainContainerRef);
     return () => ctx.revert();
   }, [showSplash]);
+
+  const handleSetApiKey = (key: string) => {
+    setUserApiKey(key);
+    updateUserApiKey(key);
+  };
+
+  const handleClearApiKey = () => {
+    setUserApiKey(null);
+    updateUserApiKey(null);
+  };
+  
+  const handleSetElevenLabsApiKey = (key: string) => {
+    setElevenLabsApiKey(key);
+    updateUserElevenLabsApiKey(key);
+  };
+
+  const handleClearElevenLabsApiKey = () => {
+    setElevenLabsApiKey(null);
+    updateUserElevenLabsApiKey(null);
+  };
+
 
   const handleGenerate = useCallback(async (characterDesc: string, scene: string, artStyle: ArtStyle, referenceImage?: UploadedImage | null, generateDossier?: boolean) => {
     setError(null);
@@ -218,7 +278,7 @@ const App: React.FC = () => {
         setGenerationHistory(prev => 
             prev.map(item => 
                 item.id === historyItemId 
-                    ? { ...item, images: [...item.images, ...newImages] } 
+                    ? { ...item, images: [...newImages, ...item.images] } 
                     : item
             )
         );
@@ -231,6 +291,118 @@ const App: React.FC = () => {
        setVariationsLoadingId(null);
     }
 };
+
+  const handleGenerateFoil = async (originalHistoryItemId: string) => {
+    const originalItem = generationHistory.find(item => item.id === originalHistoryItemId);
+    if (!originalItem || !originalItem.dossier || originalItem.dossier === 'generating') {
+      setError("Cannot generate a foil character without a complete dossier on the original.");
+      return;
+    }
+
+    setError(null);
+    setFoilLoadingId(originalHistoryItemId);
+
+    const newFoilItem: HistoryItem = {
+      id: `hist-foil-${Date.now()}`,
+      status: 'generating',
+      prompt: {
+        title: `FOIL: ${originalItem.prompt.title || originalItem.prompt.scene}`,
+        characterDesc: 'Generating foil character concept...',
+        scene: 'Compiling narrative connections...',
+        artStyle: originalItem.prompt.artStyle,
+      },
+      images: [],
+      timestamp: Date.now(),
+      dossier: 'generating',
+    };
+    setGenerationHistory(prev => [newFoilItem, ...prev]);
+
+    try {
+      const foilData = await generateFoilCharacter(originalItem);
+
+      setGenerationHistory(prev => prev.map(item =>
+        item.id === newFoilItem.id
+          ? { ...item, prompt: { ...item.prompt, characterDesc: foilData.characterDesc, scene: foilData.scene }, dossier: foilData.dossier }
+          : item
+      ));
+
+      const imageB64s = await generateCharacterImage(foilData.characterDesc, foilData.scene, originalItem.prompt.artStyle);
+
+      const newImages: GeneratedImage[] = imageB64s.map((b64, index) => ({
+        id: `${Date.now()}-${index}`,
+        b64History: [b64],
+        characterDesc: foilData.characterDesc,
+        scene: foilData.scene,
+        artStyle: originalItem.prompt.artStyle,
+        source: 'generator',
+      }));
+
+      setGenerationHistory(prev => prev.map(item =>
+        item.id === newFoilItem.id
+          ? { ...item, status: 'complete', images: newImages }
+          : item
+      ));
+
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      console.error("Error generating foil:", errorMessage);
+      setError(`Failed to generate foil: ${errorMessage}`);
+      setGenerationHistory(prev => prev.filter(item => item.id !== newFoilItem.id));
+    } finally {
+      setFoilLoadingId(null);
+    }
+  };
+
+  const handleGenerateOriginStory = async (historyItemId: string) => {
+    const itemIndex = generationHistory.findIndex(item => item.id === historyItemId);
+    if (itemIndex === -1) return;
+
+    const item = generationHistory[itemIndex];
+    if (!item.dossier || item.dossier === 'generating' || (item.dossier as Dossier).originStory === 'generating') return;
+    
+    setGenerationHistory(prev => prev.map((h, i) => {
+        if (i === itemIndex) {
+            return { ...h, dossier: { ...(h.dossier as Dossier), originStory: 'generating' }};
+        }
+        return h;
+    }));
+
+    try {
+        const story = await generateOriginStory(item.prompt.characterDesc, item.dossier as Dossier);
+         setGenerationHistory(prev => prev.map((h, i) => {
+            if (i === itemIndex) {
+                return { ...h, dossier: { ...(h.dossier as Dossier), originStory: story }};
+            }
+            return h;
+        }));
+    } catch (err) {
+        console.error("Error generating origin story:", err);
+         setGenerationHistory(prev => prev.map((h, i) => {
+            if (i === itemIndex) {
+                const { originStory, ...restDossier } = (h.dossier as Dossier);
+                return { ...h, dossier: restDossier };
+            }
+            return h;
+        }));
+    }
+  };
+
+  const handleSetCharacterVoice = (historyItemId: string, voiceArchetype: string, voiceId: string) => {
+    setGenerationHistory(prev => prev.map(item => {
+        if (item.id === historyItemId && typeof item.dossier === 'object') {
+            return {
+                ...item,
+                dossier: {
+                    ...item.dossier,
+                    voiceArchetype,
+                    voiceId,
+                }
+            };
+        }
+        return item;
+    }));
+  };
+
 
   const handleUpdateTitle = (historyItemId: string, newTitle: string) => {
     setGenerationHistory(prevHistory =>
@@ -311,12 +483,21 @@ const App: React.FC = () => {
       <div ref={mainContainerRef} className="min-h-screen font-sans flex flex-col items-center p-4 sm:p-6 lg:p-8 relative z-10">
         <div className="w-full max-w-7xl">
           <div className="header-anim relative z-30">
-            <Header onNavigate={setView} currentView={view} />
+            <Header 
+              onNavigate={setView} 
+              currentView={view}
+              onSetApiKey={handleSetApiKey}
+              onClearApiKey={handleClearApiKey}
+              hasUserApiKey={!!userApiKey}
+              onSetElevenLabsApiKey={handleSetElevenLabsApiKey}
+              onClearElevenLabsApiKey={handleClearElevenLabsApiKey}
+              hasElevenLabsApiKey={!!elevenLabsApiKey}
+            />
           </div>
           {view === 'generator' ? (
              <main className="mt-8 w-full">
               <div className="form-anim">
-                <InputForm onGenerate={handleGenerate} isLoading={generationHistory[0]?.status === 'generating' || !!variationsLoadingId} hasGenerated={generationHistory.length > 0} />
+                <InputForm onGenerate={handleGenerate} isLoading={generationHistory[0]?.status === 'generating' || !!variationsLoadingId || !!foilLoadingId} hasGenerated={generationHistory.length > 0} />
               </div>
               {error && <div className="mt-8 text-center" style={{ color: 'var(--theme-color)', border: '1px solid var(--theme-border-color)', backgroundColor: 'rgba(var(--theme-color-rgb), 0.1)', padding: '1rem'}}>{`[ERROR]: ${error}`}</div>}
               
@@ -342,7 +523,11 @@ const App: React.FC = () => {
                       onUpdateTitle={handleUpdateTitle}
                       onGenerateVariations={handleGenerateVariations}
                       onStartRefinement={handleStartRefinement}
+                      onGenerateOriginStory={handleGenerateOriginStory}
+                      onSetCharacterVoice={handleSetCharacterVoice}
+                      onGenerateFoil={handleGenerateFoil}
                       isGeneratingVariations={variationsLoadingId === historyItem.id}
+                      isGeneratingFoil={foilLoadingId === historyItem.id}
                     />
                   ))}
                 </div>

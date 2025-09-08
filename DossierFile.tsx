@@ -1,14 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { Dossier } from '../types';
 import { InlineTerminal } from './InlineTerminal';
-import { WaveformPlayer } from './WaveformPlayer';
+import { AudioPlayer } from './AudioPlayer';
 import { generateSpeech, VOICE_MAP } from '../services/elevenLabsService';
 import { generateVoiceSelection } from '../services/geminiService';
 
 interface DossierFileProps {
     dossier: Dossier | 'generating';
     historyItemId: string;
-    characterDesc: string;
     onGenerateOriginStory?: (historyItemId: string) => void;
     onSetCharacterVoice?: (historyItemId: string, voiceArchetype: string, voiceId: string) => void;
 }
@@ -30,17 +29,14 @@ const DossierListField: React.FC<{ label: string; items: string[] }> = ({ label,
 );
 
 
-export const DossierFile: React.FC<DossierFileProps> = ({ dossier, historyItemId, characterDesc, onGenerateOriginStory, onSetCharacterVoice }) => {
+export const DossierFile: React.FC<DossierFileProps> = ({ dossier, historyItemId, onGenerateOriginStory, onSetCharacterVoice }) => {
     const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
     const [audioState, setAudioState] = useState<'idle' | 'loading' | 'determining_voice' | 'playing' | 'paused' | 'error'>('idle');
     const [audioError, setAudioError] = useState<string | null>(null);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
-
     const audioRef = useRef<HTMLAudioElement | null>(null);
-    const audioRequestController = useRef<AbortController | null>(null);
 
-    // Main cleanup effect
     useEffect(() => {
         return () => {
             if (audioRef.current) {
@@ -50,11 +46,9 @@ export const DossierFile: React.FC<DossierFileProps> = ({ dossier, historyItemId
                 }
                 audioRef.current = null;
             }
-            audioRequestController.current?.abort();
         };
     }, []);
 
-    // Effect to reset audio state when the character/dossier changes
     useEffect(() => {
         if (audioRef.current) {
             audioRef.current.pause();
@@ -62,8 +56,6 @@ export const DossierFile: React.FC<DossierFileProps> = ({ dossier, historyItemId
                 URL.revokeObjectURL(audioRef.current.src);
             }
         }
-        audioRequestController.current?.abort();
-        audioRequestController.current = null;
         audioRef.current = null;
         setAudioState('idle');
         setAudioError(null);
@@ -74,20 +66,14 @@ export const DossierFile: React.FC<DossierFileProps> = ({ dossier, historyItemId
     const handlePlayPause = async () => {
         if (typeof dossier !== 'object' || !dossier.originStory || dossier.originStory === 'generating') return;
 
-        // Handle simple play/pause if audio is already loaded
         if (audioRef.current) {
             if (audioState === 'playing') {
                 audioRef.current.pause();
             } else if (audioState === 'paused' || audioState === 'idle') {
-                audioRef.current.play().catch(e => console.error("Audio play failed:", e));
+                audioRef.current.play();
             }
             return;
         }
-
-        // Cancel any previous, still-running request
-        audioRequestController.current?.abort();
-        audioRequestController.current = new AbortController();
-        const signal = audioRequestController.current.signal;
 
         setAudioError(null);
         let voiceToUse = dossier.voiceId;
@@ -96,7 +82,7 @@ export const DossierFile: React.FC<DossierFileProps> = ({ dossier, historyItemId
             if (!voiceToUse) {
                 setAudioState('determining_voice');
                 const availableArchetypes = Object.keys(VOICE_MAP);
-                const chosenArchetype = await generateVoiceSelection(dossier, characterDesc, availableArchetypes);
+                const chosenArchetype = await generateVoiceSelection(dossier, availableArchetypes);
                 voiceToUse = VOICE_MAP[chosenArchetype];
                 
                 if (!voiceToUse) throw new Error(`Could not find a voice ID for archetype: ${chosenArchetype}`);
@@ -105,13 +91,7 @@ export const DossierFile: React.FC<DossierFileProps> = ({ dossier, historyItemId
             }
 
             setAudioState('loading');
-            const blobUrl = await generateSpeech(dossier.originStory, voiceToUse, signal);
-            
-            if (signal.aborted) {
-                URL.revokeObjectURL(blobUrl);
-                return;
-            }
-
+            const blobUrl = await generateSpeech(dossier.originStory, voiceToUse);
             const audio = new Audio(blobUrl);
             audioRef.current = audio;
             
@@ -128,18 +108,9 @@ export const DossierFile: React.FC<DossierFileProps> = ({ dossier, historyItemId
                 setAudioState('error');
                 if (audio.src.startsWith('blob:')) URL.revokeObjectURL(audio.src);
             };
-            audio.play().catch(e => {
-                console.error("Audio play failed:", e);
-                setAudioError("Playback failed. Please try again.");
-                setAudioState('error');
-            });
-            audioRequestController.current = null;
+            audio.play();
 
         } catch (err) {
-            if ((err as Error).name === 'AbortError') {
-                console.log('Audio generation was aborted by the user.');
-                return;
-            }
             const errorMessage = err instanceof Error ? err.message : "An unknown error occurred.";
              if (errorMessage.includes('API key')) {
                 setAudioError("ElevenLabs API key is missing or invalid.");
@@ -147,7 +118,6 @@ export const DossierFile: React.FC<DossierFileProps> = ({ dossier, historyItemId
                 setAudioError(errorMessage);
             }
             setAudioState('error');
-            audioRequestController.current = null;
         }
     };
     
@@ -165,7 +135,6 @@ export const DossierFile: React.FC<DossierFileProps> = ({ dossier, historyItemId
                 URL.revokeObjectURL(audioRef.current.src);
             }
         }
-        audioRequestController.current?.abort();
         audioRef.current = null;
         setAudioState('idle');
         setAudioError(null);
@@ -209,14 +178,12 @@ ${dossier.originStory && typeof dossier.originStory === 'string' ? `\nORIGIN STO
 
     const isGeneratingStory = dossier.originStory === 'generating';
 
-    const getListenButtonText = () => {
+    const getInitialButtonText = () => {
         switch (audioState) {
-            case 'determining_voice': return '[VOICE...]';
-            case 'loading': return '[LOADING...]';
-            case 'error': return '[ERROR]';
-            case 'playing': return '[PAUSE]';
-            case 'paused': return '[PLAY]';
-            default: return '[LISTEN]';
+            case 'determining_voice': return '[ DETERMINING_VOICE... ]';
+            case 'loading': return '[ LOADING_AUDIO... ]';
+            case 'error': return '[ AUDIO_ERROR ]';
+            default: return '[ LISTEN_TO_STORY ]';
         }
     };
 
@@ -249,46 +216,43 @@ ${dossier.originStory && typeof dossier.originStory === 'string' ? `\nORIGIN STO
                 <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--theme-border-color-xlight)' }}>
                     {dossier.originStory && typeof dossier.originStory === 'string' ? (
                         <div>
-                            <div className="flex justify-between items-center mb-2 flex-wrap gap-2">
-                                <h4 className="font-bold" style={{ color: 'var(--theme-text-color)' }}>&gt; ORIGIN_STORY:</h4>
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={handleRegenerate}
-                                        className="text-lg py-1 px-3 border transition-colors whitespace-nowrap"
-                                        style={{ fontFamily: "'VT323', monospace", borderColor: 'var(--theme-border-color-light)', color: 'var(--theme-text-color-dim)' }}
-                                        onMouseOver={e => { e.currentTarget.style.backgroundColor = 'var(--theme-interactive-bg-hover)'; e.currentTarget.style.borderColor = 'var(--theme-border-color)'; }}
-                                        onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.borderColor = 'var(--theme-border-color-light)'; }}
-                                    >
-                                        [ REGENERATE ]
-                                    </button>
-                                    { duration <= 0 && (
-                                        <button
-                                            onClick={handlePlayPause}
-                                            disabled={audioState === 'loading' || audioState === 'determining_voice'}
-                                            className="text-lg py-1 px-3 border transition-colors whitespace-nowrap disabled:opacity-50"
-                                            style={{ fontFamily: "'VT323', monospace", borderColor: audioState === 'error' ? '#ff4d4d' : 'var(--theme-border-color)', color: audioState === 'error' ? '#ff4d4d' : 'var(--theme-color)' }}
-                                            onMouseOver={e => { if(!e.currentTarget.disabled) { e.currentTarget.style.backgroundColor = 'var(--theme-color)'; e.currentTarget.style.color = 'black'; } }}
-                                            onMouseOut={e => { if(!e.currentTarget.disabled) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--theme-color)'; } }}
-                                        >
-                                            {getListenButtonText()}
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-
+                            <h4 className="font-bold mb-2" style={{ color: 'var(--theme-text-color)' }}>&gt; ORIGIN_STORY:</h4>
                             <p className="whitespace-pre-wrap" style={{ color: 'var(--theme-text-color-dim)' }}>
                                 {dossier.originStory}
                             </p>
                            {duration > 0 ? (
-                                <WaveformPlayer
+                                <AudioPlayer
                                     isPlaying={audioState === 'playing'}
                                     duration={duration}
                                     currentTime={currentTime}
                                     onPlayPause={handlePlayPause}
                                     onSeek={handleSeek}
+                                    onRegenerate={handleRegenerate}
                                     isDisabled={audioState === 'loading' || audioState === 'determining_voice'}
                                 />
-                            ) : null}
+                            ) : (
+                                <div className="mt-4 flex flex-col sm:flex-row flex-wrap gap-2">
+                                    <button
+                                        onClick={handlePlayPause}
+                                        disabled={audioState === 'loading' || audioState === 'error' || audioState === 'determining_voice'}
+                                        className="text-lg py-2 px-4 border transition-colors whitespace-nowrap disabled:opacity-50 w-full sm:w-auto"
+                                        style={{ fontFamily: "'VT323', monospace", borderColor: 'var(--theme-border-color)', color: 'var(--theme-color)' }}
+                                        onMouseOver={e => { if(!e.currentTarget.disabled) { e.currentTarget.style.backgroundColor = 'var(--theme-color)'; e.currentTarget.style.color = 'black'; } }}
+                                        onMouseOut={e => { if(!e.currentTarget.disabled) { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--theme-color)'; } }}
+                                    >
+                                        {getInitialButtonText()}
+                                    </button>
+                                     <button
+                                        onClick={handleRegenerate}
+                                        className="text-lg py-2 px-4 border transition-colors whitespace-nowrap w-full sm:w-auto"
+                                        style={{ fontFamily: "'VT323', monospace", borderColor: 'var(--theme-border-color)', color: 'var(--theme-color)' }}
+                                        onMouseOver={e => { e.currentTarget.style.backgroundColor = 'var(--theme-color)'; e.currentTarget.style.color = 'black'; }}
+                                        onMouseOut={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--theme-color)'; }}
+                                    >
+                                        [ REGENERATE_STORY ]
+                                    </button>
+                                </div>
+                            )}
                             {audioState === 'error' && audioError && (
                                 <p className="mt-2 text-sm" style={{ color: '#ff4d4d' }}>Audio Error: {audioError}</p>
                             )}
