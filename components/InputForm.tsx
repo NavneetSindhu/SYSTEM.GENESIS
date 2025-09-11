@@ -11,6 +11,20 @@ interface InputFormProps {
   hasGenerated: boolean;
 }
 
+const characterArchetypes = {
+  'Female Android': 'A young female android with sleek silver hair, piercing glowing blue eyes, and intricate glowing circuit patterns visible on her porcelain-like skin. She has a slender, athletic build.',
+  'Space Marine': 'A grizzled male supersoldier in bulky, battle-scarred power armor. He has a square jaw, a buzz cut, and a cybernetic eye. The armor is dark green with orange accents.',
+  'Elven Sorceress': 'An elegant female elf with long, flowing white hair, pointed ears, and shimmering amethyst eyes. She wears ornate, flowing robes of deep purple and silver, adorned with mystical runes.',
+  'Cyberpunk Hacker': 'A non-binary hacker with a neon pink mohawk, multiple facial piercings, and augmented reality glasses permanently fixed over their eyes. They wear a worn leather jacket covered in patches and glitches.',
+  'Wasteland Wanderer': 'A rugged male survivor with a weathered face, a thick beard, and a tattered duster coat over patched-up gear. He carries a modified rifle and has a look of grim determination.',
+  'Custom...': ''
+};
+
+
+type ArchetypeName = keyof typeof characterArchetypes;
+
+
+
 const artStyles: { name: string; image: string }[] = [
   { name: 'Anime', image: 'https://i.postimg.cc/gjQ9vwvV/1.png' },
   { name: 'Realistic', image: 'https://i.postimg.cc/tC8y6c5K/2.png' },
@@ -21,7 +35,6 @@ const artStyles: { name: string; image: string }[] = [
 ];
 
 
-type ArchetypeName = keyof typeof characterArchetypes;
 
 
 
