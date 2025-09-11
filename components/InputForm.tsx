@@ -20,16 +20,10 @@ const artStyles: { name: string; image: string }[] = [
   { name: 'Fantasy', image: 'https://i.postimg.cc/G26zKv5m/6.png' },
 ];
 
+
 type ArchetypeName = keyof typeof characterArchetypes;
 
-const artStyles: { name: string; image: string }[] = [
-  { name: 'Anime', image: 'https://i.postimg.cc/zXgVbTNG/1.png' },
-  { name: 'Realistic', image: 'https://i.postimg.cc/Gh8sFZFr/2.png' },
-  { name: 'Cartoonish', image: 'https://i.postimg.cc/FzqktZQ2/3.png' },
-  { name: 'Steampunk', image: 'https://i.postimg.cc/PfFw8t82/4.png' },
-  { name: 'Cyberpunk', image: 'https://i.postimg.cc/J0tHdFSN/5.png' },
-  { name: 'Fantasy', image: 'https://i.postimg.cc/qqcSSmn7/6.png' },
-];
+
 
 
 const DossierToggle = ({ checked, onChange, disabled }: { checked: boolean, onChange: (checked: boolean) => void, disabled: boolean }) => (
