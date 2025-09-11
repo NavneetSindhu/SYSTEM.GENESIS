@@ -23,13 +23,14 @@ const characterArchetypes = {
 type ArchetypeName = keyof typeof characterArchetypes;
 
 const artStyles: { name: string; image: string }[] = [
-  { name: 'Anime', image: 'https://flat-beige-cwysrou4id.edgeone.app/1.png' },
-  { name: 'Realistic', image: 'https://flat-beige-cwysrou4id.edgeone.app/2.png' },
-  { name: 'Cartoonish', image: 'https://flat-beige-cwysrou4id.edgeone.app/3.png' },
-  { name: 'Steampunk', image: 'https://flat-beige-cwysrou4id.edgeone.app/4.png' },
-  { name: 'Cyberpunk', image: 'https://flat-beige-cwysrou4id.edgeone.app/5.png' },
-  { name: 'Fantasy', image: 'https://flat-beige-cwysrou4id.edgeone.app/6.png' },
+  { name: 'Anime', image: 'https://i.postimg.cc/zXgVbTNG/1.png' },
+  { name: 'Realistic', image: 'https://i.postimg.cc/Gh8sFZFr/2.png' },
+  { name: 'Cartoonish', image: 'https://i.postimg.cc/FzqktZQ2/3.png' },
+  { name: 'Steampunk', image: 'https://i.postimg.cc/PfFw8t82/4.png' },
+  { name: 'Cyberpunk', image: 'https://i.postimg.cc/J0tHdFSN/5.png' },
+  { name: 'Fantasy', image: 'https://i.postimg.cc/qqcSSmn7/6.png' },
 ];
+
 
 const DossierToggle = ({ checked, onChange, disabled }: { checked: boolean, onChange: (checked: boolean) => void, disabled: boolean }) => (
     <div className="flex items-center gap-4 cursor-pointer" onClick={() => !disabled && onChange(!checked)}>
